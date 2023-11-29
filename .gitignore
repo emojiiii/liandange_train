@@ -1,0 +1,26 @@
+.vscode
+.idea
+
+venv
+__pycache__
+
+output/*
+!output/.keep
+
+Python310
+py310
+python
+git
+
+train/*
+logs/*
+sd-models/*
+toml/autosave/*
+config/autosave/*
+!sd-models/put stable diffusion model here.txt
+!logs/.keep
+
+tests/
+
+huggingface/hub/models*
+huggingface/hub/version_diffusers_cache.txt
