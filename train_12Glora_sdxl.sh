@@ -228,7 +228,7 @@ if [[ "$train_mode" =~ "db" ]]; then
       ext_args+=( "--no_token_padding" )
     fi
     if [[ "$stop_text_encoder_training" ]]; then
-      if [[ "$gradient_accumulation_steps" ]]; then
+      if [[ "$gradient_accumulation_steps" -ne 0 ]]; then
         stop_text_encoder_training=$((stop_text_encoder_training * gradient_accumulation_steps))
       fi
       ext_args+=( "--stop_text_encoder_training=$stop_text_encoder_training" )
@@ -675,12 +675,12 @@ if [[ "$network_module" ]]; then
   ext_args+=( "--network_module=$network_module" )
 fi
 
-if [[ "$gradient_accumulation_steps" ]]; then
+if [[ "$gradient_accumulation_steps" -ne 0 ]]; then
   ext_args+=( "--gradient_accumulation_steps=$gradient_accumulation_steps" )
 fi
 
 if [[ "$lr_warmup_steps" ]]; then
-  if [[ "$gradient_accumulation_steps" ]]; then
+  if [[ "$gradient_accumulation_steps" -ne 0 ]]; then
     lr_warmup_steps=$((lr_warmup_steps * gradient_accumulation_steps))
   fi
   ext_args+=( "--lr_warmup_steps=$lr_warmup_steps" )
