@@ -197,465 +197,455 @@ if [ ! "$train_mode" == "*lora" ] && [ ! "$train_mode" == "sdxl_cn3l" ]; then
   network_dropout="0"
 fi
 
+if [[ $train_mode == *db* ]]; then
+  if [[ $train_mode == "db" ]]; then
+    laungh_script="train_db"
+    if [[ $no_token_padding -ne 0 ]]; then
+      ext_args+=( "--no_token_padding" )
+    fi
+    if [[ $stop_text_encoder_training -ne 0 ]]; then
+      if [[ $gradient_accumulation_steps ]]; then
+        stop_text_encoder_training=$(( $stop_text_encoder_training * $gradient_accumulation_steps ))
+      fi
+      ext_args+=( "--stop_text_encoder_training=$stop_text_encoder_training" )
+    fi
+  else
+    laungh_script="train"
+    if [[ $diffusers_xformers -ne 0 ]]; then
+      ext_args+=( "--diffusers_xformers" )
+    fi
+    if [[ $train_text_encoder -ne 0 ]]; then
+      ext_args+=( "--train_text_encoder" )
+    fi
+    if [[ $enable_block_lr -ne 0 ]]; then
+      ext_args+=( "--block_lr=$block_lr" )
+    fi
+  fi
+fi
 
-if ($train_mode -ilike "*db") {
-  if ($train_mode -ieq  "db") {
-    $laungh_script = "train_db";
-    if ($no_token_padding -ne 0) {
-      [void]$ext_args.Add("--no_token_padding")
-    }
-    if ($stop_text_encoder_training) {
-      if ($gradient_accumulation_steps){
-        $stop_text_encoder_training = $stop_text_encoder_training * $gradient_accumulation_steps
-      }
-    [void]$ext_args.Add("--stop_text_encoder_training=$stop_text_encoder_training")
-    }
-  }
-  else{
-    $laungh_script = "train";
-    if ($diffusers_xformers -ne 0) {
-      [void]$ext_args.Add("--diffusers_xformers")
-    }
-    if ($train_text_encoder -ne 0) {
-      [void]$ext_args.Add("--train_text_encoder")
-    }
-    if ($enable_block_lr -ne 0) {
-      [void]$ext_args.Add("--block_lr=$block_lr")   
-    }
-  }
-}
+if [[ $train_mode == *cn3l* ]]; then
+  laungh_script="cn3l"
+  if [[ $conditioning_data_dir ]]; then
+    ext_args+=( "--conditioning_data_dir=$conditioning_data_dir" )
+  fi
+  if [[ $cond_emb_dim ]]; then
+    ext_args+=( "--cond_emb_dim=$cond_emb_dim" )
+  fi
+fi
 
-if ($train_mode -ilike "*cn3l") {
-  $laungh_script = "cn3l"
-  if ($conditioning_data_dir) { 
-  [void]$ext_args.Add("--conditioning_data_dir=$conditioning_data_dir")
-  }
-  if ($cond_emb_dim) { 
-  [void]$ext_args.Add("--cond_emb_dim=$cond_emb_dim")
-  }
-}
+if [[ $train_mode == sdxl* ]]; then
+  laungh_script="sdxl_$laungh_script"
+  if [[ $min_timestep -ne 0 ]]; then
+    ext_args+=( "--min_timestep=$min_timestep" )
+  fi
+  if [[ $max_timestep -ne 1000 ]]; then
+    ext_args+=( "--max_timestep=$max_timestep" )
+  fi
+  if [[ $cache_text_encoder_outputs -ne 0 ]]; then
+    ext_args+=( "--cache_text_encoder_outputs" )
+    if [[ $cache_text_encoder_outputs_to_disk -ne 0 ]]; then
+      ext_args+=( "--cache_text_encoder_outputs_to_disk" )
+    fi
+    shuffle_caption=0
+    train_unet_only=1
+    caption_dropout_rate=0
+    caption_tag_dropout_rate=0
+  fi
+  if [[ $no_half_vae -ne 0 ]]; then
+    ext_args+=( "--no_half_vae" )
+    mixed_precision=""
+    full_fp16=0
+    full_bf16=0
+  fi
+  if [[ $bucket_reso_steps -ne 64 ]]; then
+    ext_args+=( "--bucket_reso_steps=$bucket_reso_steps" )
+  fi
+fi
 
-if ($train_mode -ilike "sdxl*"){
-  $laungh_script = "sdxl_" + $laungh_script
-  if ($min_timestep -ne 0) {
-    [void]$ext_args.Add("--min_timestep=$min_timestep")
-  }
-  if ($max_timestep -ne 1000) {
-    [void]$ext_args.Add("--max_timestep=$max_timestep")
-  }
-  if ($cache_text_encoder_outputs -ne 0) { 
-    [void]$ext_args.Add("--cache_text_encoder_outputs")
-    if ($cache_text_encoder_outputs_to_disk -ne 0) { 
-      [void]$ext_args.Add("--cache_text_encoder_outputs_to_disk")
-    }
-    $shuffle_caption = 0
-    $train_unet_only = 1
-    $caption_dropout_rate = 0
-    $caption_tag_dropout_rate = 0
-  }
-  if ($no_half_vae -ne 0) { 
-    [void]$ext_args.Add("--no_half_vae")
-    $mixed_precision = ""
-    $full_fp16 = 0
-    $full_bf16 = 0
-  }
-  if ($bucket_reso_steps -ne 64) { 
-    [void]$ext_args.Add("--bucket_reso_steps=$bucket_reso_steps")
-  }
-}
+if [[ $dataset_class ]]; then
+  ext_args+=( "--dataset_class=$dataset_class" )
+else
+  ext_args+=( "--train_data_dir=$train_data_dir" )
+fi
 
-if ($dataset_class) { 
-  [void]$ext_args.Add("--dataset_class=$dataset_class")
-}
-else {
-  [void]$ext_args.Add("--train_data_dir=$train_data_dir")
-}
+if [[ $vae ]]; then
+  ext_args+=( "--vae=$vae" )
+fi
 
-if ($vae) {
-  [void]$ext_args.Add("--vae=$vae")
-}
-
-if ($is_v2_model) {
-  [void]$ext_args.Add("--v2")
-  $min_snr_gamma = 0
-  if ($v_parameterization) {
-  [void]$ext_args.Add("--v_parameterization")
-  [void]$ext_args.Add("--scale_v_pred_loss_like_noise_pred")
-  }
-}
-else {
-  [void]$ext_args.Add("--clip_skip=$clip_skip")
-}
-
-if ($prior_loss_weight -and $prior_loss_weight -ne 1) {
-  [void]$ext_args.Add("--prior_loss_weight=$prior_loss_weight")
-}
-
-if ($network_dim) {
-  [void]$ext_args.Add("--network_dim=$network_dim")
-}
-
-if ($network_alpha) {
-  [void]$ext_args.Add("--network_alpha=$network_alpha")
-}
-
-if ($training_comment) {
-  [void]$ext_args.Add("--training_comment=$training_comment")
-}
-
-if ($persistent_workers) {
-  [void]$ext_args.Add("--persistent_data_loader_workers")
-}
-
-if ($max_data_loader_n_workers) {
-  [void]$ext_args.Add("--max_data_loader_n_workers=$max_data_loader_n_workers")
-}
-
-if ($shuffle_caption) {
-  [void]$ext_args.Add("--shuffle_caption")
-}
-
-if ($weighted_captions) {
-  [void]$ext_args.Add("--weighted_captions")
-}
-
-if ($cache_latents) { 
-  [void]$ext_args.Add("--cache_latents")
-  if ($cache_latents_to_disk) {
-    [void]$ext_args.Add("--cache_latents_to_disk")
-  }
-}
-
-if ($output_config) {
-  [void]$ext_args.Add("--output_config")
-  [void]$ext_args.Add("--config_file=$config_file")
-}
-
-if ($gradient_checkpointing) {
-  [void]$ext_args.Add("--gradient_checkpointing")
-}
-
-if ($save_state -eq 1) {
-  [void]$ext_args.Add("--save_state")
-}
-
-if ($resume) {
-  [void]$ext_args.Add("--resume=$resume")
-}
-
-if ($noise_offset) {
-  [void]$ext_args.Add("--noise_offset=$noise_offset")
-  if ($adaptive_noise_scale) {
-    [void]$ext_args.Add("--adaptive_noise_scale=$adaptive_noise_scale")
-  }
-}
-elseif ($multires_noise_iterations) {
-  [void]$ext_args.Add("--multires_noise_iterations=$multires_noise_iterations")
-  [void]$ext_args.Add("--multires_noise_discount=$multires_noise_discount")
-}
-
-if ($network_dropout -ne 0) {
-  $enable_lycoris = 0
-  [void]$ext_args.Add("--network_dropout=$network_dropout")
-  if ($scale_weight_norms -ne 0) { 
-    [void]$ext_args.Add("--scale_weight_norms=$scale_weight_norms")
-  }
-  if ($enable_dylora -ne 0) {
-  [void]$ext_args.Add("--network_args")
-    if ($rank_dropout) {
-      [void]$ext_args.Add("rank_dropout=$rank_dropout")
-    }
-    if ($module_dropout) {
-      [void]$ext_args.Add("module_dropout=$module_dropout")
-    }
-  }
-}
-
-if ($enable_block_weights) {
-  [void]$ext_args.Add("--network_args")
-  [void]$ext_args.Add("down_lr_weight=$down_lr_weight")
-  [void]$ext_args.Add("mid_lr_weight=$mid_lr_weight")
-  [void]$ext_args.Add("up_lr_weight=$up_lr_weight")
-  [void]$ext_args.Add("block_lr_zero_threshold=$block_lr_zero_threshold")
-  if ($enable_block_dim) {
-    [void]$ext_args.Add("block_dims=$block_dims")
-    [void]$ext_args.Add("block_alphas=$block_alphas")
-    if ($conv_block_dims){
-    [void]$ext_args.Add("conv_block_dims=$conv_block_dims")
-      if ($conv_block_alphas){
-         [void]$ext_args.Add("conv_block_alphas=$conv_block_alphas")
-      }
-    }
-    elseif ($conv_dim){
-    [void]$ext_args.Add("conv_dim=$conv_dim")
-      if ($conv_alpha){
-        [void]$ext_args.Add("conv_alpha=$conv_alpha")
-      }
-    }
-  }
-}
-elseif ($enable_lycoris) {
-  $network_module = "lycoris.kohya"
-  #[void]$ext_args.Add("--network_module=lycoris.kohya")
-  [void]$ext_args.Add("--network_args")
-  if ($conv_dim){
-    [void]$ext_args.Add("conv_dim=$conv_dim")
-      if ($conv_alpha){
-        [void]$ext_args.Add("conv_alpha=$conv_alpha")
-    }
-  }
-  if ($dropout) {
-    [void]$ext_args.Add("dropout=$dropout")
-  }
-  [void]$ext_args.Add("algo=$algo")
-}
-elseif ($enable_dylora) {
-  $network_module = "networks.dylora"
-  #[void]$ext_args.Add("--network_module=networks.dylora")
-  [void]$ext_args.Add("--network_args")
-  [void]$ext_args.Add("unit=$unit")
-  if ($conv_dim){
-    [void]$ext_args.Add("conv_dim=$conv_dim")
-      if ($conv_alpha){
-        [void]$ext_args.Add("conv_alpha=$conv_alpha")
-    }
-  }
-  if ($module_dropout) {
-      [void]$ext_args.Add("module_dropout=$module_dropout")
-  }
-}
-elseif ($enable_lora_fa) {
-   $network_module = "networks.lora_fa"
-}
-else{
-  if ($conv_dim){
-    [void]$ext_args.Add("--network_args")
-    [void]$ext_args.Add("conv_dim=$conv_dim")
-      if ($conv_alpha){
-        [void]$ext_args.Add("conv_alpha=$conv_alpha")
-    }
-  }
-}
-
-if($optimizer_type -ieq "adafactor"){
-	[void]$ext_args.Add("--optimizer_type=$optimizer_type")
-	[void]$ext_args.Add("--optimizer_args")
-	[void]$ext_args.Add("scale_parameter=False")
-  [void]$ext_args.Add("warmup_init=False")
-  [void]$ext_args.Add("relative_step=False")
-  $lr_warmup_steps=100
-}
-
-if($optimizer_type -ilike "DAdapt*"){
-  [void]$ext_args.Add("--optimizer_type=$optimizer_type")
-  [void]$ext_args.Add("--optimizer_args")
-  [void]$ext_args.Add("weight_decay=0.01")
-  if($optimizer_type -ieq "DAdaptation" -or $optimizer_type -ilike "DAdaptAdam*"){
-    [void]$ext_args.Add("decouple=True")
-    if ($optimizer_type -ieq "DAdaptAdam") {
-        [void]$ext_args.Add("use_bias_correction=True")
-      }
-  }
-  $lr = "1"
-  if ($unet_lr) {
-    $unet_lr = $lr
-  }
-  if ($text_encoder_lr) {
-    $text_encoder_lr = $lr
-  }
-}
-
-if($optimizer_type -ieq "Lion" -or $optimizer_type -ieq "Lion8bit" -or $optimizer_type -ieq "PagedLion8bit"){
-	[void]$ext_args.Add("--optimizer_type=$optimizer_type")
-	[void]$ext_args.Add("--optimizer_args")
-  [void]$ext_args.Add("weight_decay=0.01")
-  [void]$ext_args.Add("betas=.95,.98")
-}
-
-if($optimizer_type -ieq "AdamW8bit"){
-	$optimizer_type=""
-	[void]$ext_args.Add("--use_8bit_adam")
-}
-
-if($optimizer_type -ieq "PagedAdamW8bit"){
-  [void]$ext_args.Add("--optimizer_type=$optimizer_type")
-  [void]$ext_args.Add("--optimizer_args")
-  [void]$ext_args.Add("weight_decay=0.01")
-}
-
-if($optimizer_type -ieq "Sophia") {
-  [void]$ext_args.Add("--optimizer_type=pytorch_optimizer.SophiaH")
-  [void]$ext_args.Add("--optimizer_args")
-  [void]$ext_args.Add("weight_decay=0.01")
-}
-
-if($optimizer_type -ieq "Prodigy") {
-  [void]$ext_args.Add("--optimizer_type=$optimizer_type")
-  [void]$ext_args.Add("--optimizer_args")
-  [void]$ext_args.Add("weight_decay=0.01")
-  [void]$ext_args.Add("decouple=True")
-  [void]$ext_args.Add("use_bias_correction=True")
-  [void]$ext_args.Add("d_coef=$d_coef")
-  if($lr_warmup_steps){
-    [void]$ext_args.Add("safeguard_warmup=True")
-  }
-  if($d0){
-    [void]$ext_args.Add("d0=$d0")
-  }
-  $lr = "1"
-  if ($unet_lr) {
-    $unet_lr = $lr
-  }
-  if ($text_encoder_lr) {
-    $text_encoder_lr = $lr
-  }
-}
-
-if($optimizer_type -ieq "Adan") {
-  [void]$ext_args.Add("--optimizer_type=pytorch_optimizer.Adan")
-  [void]$ext_args.Add("--optimizer_args")
-  [void]$ext_args.Add("weight_decay=2e-5")
-  [void]$ext_args.Add("max_grad_norm=1.0")
-  [void]$ext_args.Add("adanorm=true")
-}
-
-if($optimizer_type -ieq "Tiger") {
-  [void]$ext_args.Add("--optimizer_type=pytorch_optimizer.Tiger")
-  [void]$ext_args.Add("--optimizer_args")
-  [void]$ext_args.Add("weight_decay=0.01")
-}
-
-if ($unet_lr) {
-  if ($train_unet_only) {
-    $train_text_encoder_only=0
-    [void]$ext_args.Add("--network_train_unet_only")
-  }
-  [void]$ext_args.Add("--unet_lr=$unet_lr")
-}
-
-if ($text_encoder_lr) {
-  if ($train_text_encoder_only) {
-    [void]$ext_args.Add("--network_train_text_encoder_only")
-  }
-  [void]$ext_args.Add("--text_encoder_lr=$text_encoder_lr")
-}
-
-if ($network_weights) {
-  [void]$ext_args.Add("--network_weights=$network_weights")
-}
-
-if ($reg_data_dir) {
-  [void]$ext_args.Add("--reg_data_dir=$reg_data_dir")
-}
-
-if ($keep_tokens) {
-  [void]$ext_args.Add("--keep_tokens=$keep_tokens")
-}
-
-if ($min_snr_gamma -ne 0) {
-  [void]$ext_args.Add("--min_snr_gamma=$min_snr_gamma")
-}
-elseif($debiased_estimation_loss -ne 0){
-  [void]$ext_args.Add("--debiased_estimation_loss")
-}
-
-if ($ip_noise_gamma -ne 0) {
-  [void]$ext_args.Add("--ip_noise_gamma=$ip_noise_gamma")
-}
-
-if ($wandb_api_key) {
-  [void]$ext_args.Add("--wandb_api_key=$wandb_api_key")
-  [void]$ext_args.Add("--log_with=wandb")
-  [void]$ext_args.Add("--log_tracker_name=" +$output_name)
-}
-
-if ($enable_sample) {
-  [void]$ext_args.Add("--sample_every_n_epochs=$sample_every_n_epochs")
-  [void]$ext_args.Add("--sample_prompts=$sample_prompts")
-  [void]$ext_args.Add("--sample_sampler=$sample_sampler")
-}
-
-if ($lr_scheduler_num_cycles) {
-  [void]$ext_args.Add("--lr_scheduler_num_cycles=$lr_scheduler_num_cycles")
-}
-
-if ($base_weights) {
-  [void]$ext_args.Add("--base_weights")
-  foreach ($base_weight in $base_weights.Split(" ")) {
-    [void]$ext_args.Add($base_weight)
-  }
-  [void]$ext_args.Add("--base_weights_multiplier")
-  foreach ($ratio in $base_weights_multiplier.Split(" ")) {
-    [void]$ext_args.Add([float]$ratio)
-  }
-}
-
-if ($enable_bucket) {
-  [void]$ext_args.Add("--enable_bucket")
-  [void]$ext_args.Add("--min_bucket_reso=$min_bucket_reso")
-  [void]$ext_args.Add("--max_bucket_reso=$max_bucket_reso")
-}
+if [[ $is_v2_model -ne 0 ]]; then
+  ext_args+=( "--v2" )
+  min_snr_gamma=0
+  if [[ $v_parameterization -ne 0 ]]; then
+    ext_args+=( "--v_parameterization" )
+    ext_args+=( "--scale_v_pred_loss_like_noise_pred" )
+  fi
+else
+  ext_args+=( "--clip_skip=$clip_skip" )
+fi
 
 
-if($full_fp16 -ne 0){
-  [void]$ext_args.Add("--full_fp16")
-  $mixed_precision = "fp16"
-  $save_precision = "fp16"
-}
-elseif($full_bf16 -ne 0){
-  [void]$ext_args.Add("--full_bf16")
-  $mixed_precision = "bf16"
-  $save_precision = "bf16"
-}
+if [[ $prior_loss_weight && $prior_loss_weight -ne 1 ]]; then
+  ext_args+=( "--prior_loss_weight=$prior_loss_weight" )
+fi
 
-if ($mixed_precision) {
-  [void]$ext_args.Add("--mixed_precision=$mixed_precision")
-}
+if [[ $network_dim ]]; then
+  ext_args+=( "--network_dim=$network_dim" )
+fi
 
-if ($network_module) {
-  [void]$ext_args.Add("--network_module=$network_module")
-}
+if [[ $network_alpha ]]; then
+  ext_args+=( "--network_alpha=$network_alpha" )
+fi
 
-if ($gradient_accumulation_steps) {
-  [void]$ext_args.Add("--gradient_accumulation_steps=$gradient_accumulation_steps")
-}
+if [[ $training_comment ]]; then
+  ext_args+=( "--training_comment=$training_comment" )
+fi
 
-if ($lr_warmup_steps) {
-  if ($gradient_accumulation_steps){
-    $lr_warmup_steps = $lr_warmup_steps * $gradient_accumulation_steps
-  }
-  [void]$ext_args.Add("--lr_warmup_steps=$lr_warmup_steps")
-}
+if [[ $persistent_workers ]]; then
+  ext_args+=( "--persistent_data_loader_workers" )
+fi
 
-if ($caption_dropout_every_n_epochs) {
-  [void]$ext_args.Add("--caption_dropout_every_n_epochs=$caption_dropout_every_n_epochs")
-}
-if ($caption_dropout_rate) {
-  [void]$ext_args.Add("--caption_dropout_rate=$caption_dropout_rate")
-}
-if ($caption_tag_dropout_rate) {
-  [void]$ext_args.Add("--caption_tag_dropout_rate=$caption_tag_dropout_rate")
-}
+if [[ $max_data_loader_n_workers ]]; then
+  ext_args+=( "--max_data_loader_n_workers=$max_data_loader_n_workers" )
+fi
 
-# run train
-accelerate launch --num_cpu_threads_per_process=8 "./sd-scripts/$laungh_script.py" `
-  --pretrained_model_name_or_path=$pretrained_model `
-  --output_dir="./output" `
-  --logging_dir="./logs" `
-  --resolution=$resolution `
-  --max_train_epochs=$max_train_epoches `
-  --learning_rate=$lr `
-  --lr_scheduler=$lr_scheduler `
-  --output_name=$output_name `
-  --train_batch_size=$batch_size `
-  --save_every_n_epochs=$save_every_n_epochs `
-  --save_precision=$save_precision `
-  --seed=$seed  `
-  --max_token_length=225 `
-  --caption_extension=".txt" `
-  --save_model_as=$save_model_as `
-  --vae_batch_size=$vae_batch_size `
-  --xformers $ext_args
+if [[ $shuffle_caption -ne 0 ]]; then
+  ext_args+=( "--shuffle_caption" )
+fi
 
-Write-Output "Train finished"
-Read-Host | Out-Null ;
+if [[ $weighted_captions -ne 0 ]]; then
+  ext_args+=( "--weighted_captions" )
+fi
+
+if [[ $cache_latents ]]; then
+  ext_args+=( "--cache_latents" )
+  if [[ $cache_latents_to_disk ]]; then
+    ext_args+=( "--cache_latents_to_disk" )
+  fi
+fi
+
+if [[ $output_config -ne 0 ]]; then
+  ext_args+=( "--output_config" )
+  ext_args+=( "--config_file=$config_file" )
+fi
+
+if [[ $gradient_checkpointing ]]; then
+  ext_args+=( "--gradient_checkpointing" )
+fi
+
+if [[ $save_state -eq 1 ]]; then
+  ext_args+=( "--save_state" )
+fi
+
+if [[ $resume ]]; then
+  ext_args+=( "--resume=$resume" )
+fi
+
+if [[ $noise_offset -ne 0 ]]; then
+  ext_args+=( "--noise_offset=$noise_offset" )
+  if [[ $adaptive_noise_scale -ne 0 ]]; then
+    ext_args+=( "--adaptive_noise_scale=$adaptive_noise_scale" )
+  fi
+elif [[ $multires_noise_iterations -ne 0 ]]; then
+  ext_args+=( "--multires_noise_iterations=$multires_noise_iterations" )
+  ext_args+=( "--multires_noise_discount=$multires_noise_discount" )
+fi
+
+if [[ $network_dropout -ne 0 ]]; then
+  enable_lycoris=0
+  ext_args+=( "--network_dropout=$network_dropout" )
+  if [[ $scale_weight_norms -ne 0 ]]; then
+    ext_args+=( "--scale_weight_norms=$scale_weight_norms" )
+  fi
+  if [[ $enable_dylora -ne 0 ]]; then
+    ext_args+=( "--network_args" )
+    if [[ $rank_dropout -ne 0 ]]; then
+      ext_args+=( "rank_dropout=$rank_dropout" )
+    fi
+    if [[ $module_dropout -ne 0 ]]; then
+      ext_args+=( "module_dropout=$module_dropout" )
+    fi
+  fi
+fi
+
+if [[ $enable_block_weights -ne 0 ]]; then
+  ext_args+=( "--network_args" )
+  ext_args+=( "down_lr_weight=$down_lr_weight" )
+  ext_args+=( "mid_lr_weight=$mid_lr_weight" )
+  ext_args+=( "up_lr_weight=$up_lr_weight" )
+  ext_args+=( "block_lr_zero_threshold=$block_lr_zero_threshold" )
+  if [[ $enable_block_dim -ne 0 ]]; then
+    ext_args+=( "block_dims=$block_dims" )
+    ext_args+=( "block_alphas=$block_alphas" )
+    if [[ $conv_block_dims ]]; then
+      ext_args+=( "conv_block_dims=$conv_block_dims" )
+      if [[ $conv_block_alphas ]]; then
+        ext_args+=( "conv_block_alphas=$conv_block_alphas" )
+      fi
+    elif [[ $conv_dim ]]; then
+      ext_args+=( "conv_dim=$conv_dim" )
+      if [[ $conv_alpha ]]; then
+        ext_args+=( "conv_alpha=$conv_alpha" )
+      fi
+    fi
+  fi
+elif [[ $enable_lycoris -ne 0 ]]; then
+  network_module="lycoris.kohya"
+  ext_args+=( "--network_args" )
+  if [[ $conv_dim ]]; then
+    ext_args+=( "conv_dim=$conv_dim" )
+    if [[ $conv_alpha ]]; then
+      ext_args+=( "conv_alpha=$conv_alpha" )
+    fi
+  fi
+  if [[ $dropout -ne 0 ]]; then
+    ext_args+=( "dropout=$dropout" )
+  fi
+  ext_args+=( "algo=$algo" )
+elif [[ $enable_dylora -ne 0 ]]; then
+  network_module="networks.dylora"
+  ext_args+=( "--network_args" )
+  ext_args+=( "unit=$unit" )
+  if [[ $conv_dim ]]; then
+    ext_args+=( "conv_dim=$conv_dim" )
+    if [[ $conv_alpha ]]; then
+      ext_args+=( "conv_alpha=$conv_alpha" )
+    fi
+  fi
+  if [[ $module_dropout -ne 0 ]]; then
+    ext_args+=( "module_dropout=$module_dropout" )
+  fi
+elif [[ $enable_lora_fa -ne 0 ]]; then
+  network_module="networks.lora_fa"
+else
+  if [[ $conv_dim ]]; then
+    ext_args+=( "--network_args" )
+    ext_args+=( "conv_dim=$conv_dim" )
+    if [[ $conv_alpha ]]; then
+      ext_args+=( "conv_alpha=$conv_alpha" )
+    fi
+  fi
+fi
+
+if [[ $optimizer_type == "adafactor" ]]; then
+  ext_args+=( "--optimizer_type=$optimizer_type" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "scale_parameter=False" )
+  ext_args+=( "warmup_init=False" )
+  ext_args+=( "relative_step=False" )
+  lr_warmup_steps=100
+fi
+
+if [[ $optimizer_type == DAdapt* ]]; then
+  ext_args+=( "--optimizer_type=$optimizer_type" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "weight_decay=0.01" )
+  if [[ $optimizer_type == "DAdaptation" || $optimizer_type == DAdaptAdam* ]]; then
+    ext_args+=( "decouple=True" )
+    if [[ $optimizer_type == "DAdaptAdam" ]]; then
+      ext_args+=( "use_bias_correction=True" )
+    fi
+  fi
+  lr="1"
+  if [[ $unet_lr ]]; then
+    unet_lr=$lr
+  fi
+  if [[ $text_encoder_lr ]]; then
+    text_encoder_lr=$lr
+  fi
+fi
+
+if [[ $optimizer_type == "Lion" || $optimizer_type == "Lion8bit" || $optimizer_type == "PagedLion8bit" ]]; then
+  ext_args+=( "--optimizer_type=$optimizer_type" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "weight_decay=0.01" )
+  ext_args+=( "betas=.95,.98" )
+fi
+
+if [[ $optimizer_type == "AdamW8bit" ]]; then
+  optimizer_type=""
+  ext_args+=( "--use_8bit_adam" )
+fi
+
+if [[ $optimizer_type == "PagedAdamW8bit" ]]; then
+  ext_args+=( "--optimizer_type=$optimizer_type" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "weight_decay=0.01" )
+fi
+
+if [[ $optimizer_type == "Sophia" ]]; then
+  ext_args+=( "--optimizer_type=pytorch_optimizer.SophiaH" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "weight_decay=0.01" )
+fi
+
+if [[ $optimizer_type == "Prodigy" ]]; then
+  ext_args+=( "--optimizer_type=$optimizer_type" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "weight_decay=0.01" )
+  ext_args+=( "decouple=True" )
+  ext_args+=( "use_bias_correction=True" )
+  ext_args+=( "d_coef=$d_coef" )
+  if [[ $lr_warmup_steps ]]; then
+    ext_args+=( "safeguard_warmup=True" )
+  fi
+  if [[ $d0 ]]; then
+    ext_args+=( "d0=$d0" )
+  fi
+  lr="1"
+  if [[ $unet_lr ]]; then
+    unet_lr=$lr
+  fi
+  if [[ $text_encoder_lr ]]; then
+    text_encoder_lr=$lr
+  fi
+fi
+
+if [[ $optimizer_type == "Adan" ]]; then
+  ext_args+=( "--optimizer_type=pytorch_optimizer.Adan" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "weight_decay=2e-5" )
+  ext_args+=( "max_grad_norm=1.0" )
+  ext_args+=( "adanorm=true" )
+fi
+
+if [[ $optimizer_type == "Tiger" ]]; then
+  ext_args+=( "--optimizer_type=pytorch_optimizer.Tiger" )
+  ext_args+=( "--optimizer_args" )
+  ext_args+=( "weight_decay=0.01" )
+fi
+
+
+if [[ $unet_lr ]]; then
+  if [[ $train_unet_only -ne 0 ]]; then
+    train_text_encoder_only=0
+    ext_args+=( "--network_train_unet_only" )
+  fi
+  ext_args+=( "--unet_lr=$unet_lr" )
+fi
+
+if [[ $text_encoder_lr ]]; then
+  if [[ $train_text_encoder_only -ne 0 ]]; then
+    ext_args+=( "--network_train_text_encoder_only" )
+  fi
+  ext_args+=( "--text_encoder_lr=$text_encoder_lr" )
+fi
+
+if [[ $network_weights ]]; then
+  ext_args+=( "--network_weights=$network_weights" )
+fi
+
+if [[ $reg_data_dir ]]; then
+  ext_args+=( "--reg_data_dir=$reg_data_dir" )
+fi
+
+if [[ $keep_tokens ]]; then
+  ext_args+=( "--keep_tokens=$keep_tokens" )
+fi
+
+if [[ $min_snr_gamma -ne 0 ]]; then
+  ext_args+=( "--min_snr_gamma=$min_snr_gamma" )
+elif [[ $debiased_estimation_loss -ne 0 ]]; then
+  ext_args+=( "--debiased_estimation_loss" )
+fi
+
+if [[ $ip_noise_gamma -ne 0 ]]; then
+  ext_args+=( "--ip_noise_gamma=$ip_noise_gamma" )
+fi
+
+if [[ $wandb_api_key ]]; then
+  ext_args+=( "--wandb_api_key=$wandb_api_key" )
+  ext_args+=( "--log_with=wandb" )
+  ext_args+=( "--log_tracker_name=$output_name" )
+fi
+
+if [[ $enable_sample -ne 0 ]]; then
+  ext_args+=( "--sample_every_n_epochs=$sample_every_n_epochs" )
+  ext_args+=( "--sample_prompts=$sample_prompts" )
+  ext_args+=( "--sample_sampler=$sample_sampler" )
+fi
+
+if [[ $lr_scheduler_num_cycles ]]; then
+  ext_args+=( "--lr_scheduler_num_cycles=$lr_scheduler_num_cycles" )
+fi
+
+
+
+if [[ $base_weights ]]; then
+  ext_args+=( "--base_weights" )
+  IFS=' ' read -ra base_weights_arr <<< "$base_weights"
+  for base_weight in "${base_weights_arr[@]}"; do
+    ext_args+=( "$base_weight" )
+  done
+  ext_args+=( "--base_weights_multiplier" )
+  IFS=' ' read -ra ratios_arr <<< "$base_weights_multiplier"
+  for ratio in "${ratios_arr[@]}"; do
+    ext_args+=( "--base_weights_multiplier" "$ratio" )
+  done
+fi
+
+if [[ $enable_bucket -ne 0 ]]; then
+  ext_args+=( "--enable_bucket" )
+  ext_args+=( "--min_bucket_reso=$min_bucket_reso" )
+  ext_args+=( "--max_bucket_reso=$max_bucket_reso" )
+fi
+
+if [[ $full_fp16 -ne 0 ]]; then
+  ext_args+=( "--full_fp16" )
+  mixed_precision="fp16"
+  save_precision="fp16"
+elif [[ $full_bf16 -ne 0 ]]; then
+  ext_args+=( "--full_bf16" )
+  mixed_precision="bf16"
+  save_precision="bf16"
+fi
+
+if [[ $mixed_precision ]]; then
+  ext_args+=( "--mixed_precision=$mixed_precision" )
+fi
+
+if [[ $network_module ]]; then
+  ext_args+=( "--network_module=$network_module" )
+fi
+
+if [[ $gradient_accumulation_steps ]]; then
+  ext_args+=( "--gradient_accumulation_steps=$gradient_accumulation_steps" )
+fi
+
+if [[ $lr_warmup_steps -ne 0 ]]; then
+  if [[ $gradient_accumulation_steps ]]; then
+    lr_warmup_steps=$((lr_warmup_steps * gradient_accumulation_steps))
+  fi
+  ext_args+=( "--lr_warmup_steps=$lr_warmup_steps" )
+fi
+
+if [[ $caption_dropout_every_n_epochs -ne 0 ]]; then
+  ext_args+=( "--caption_dropout_every_n_epochs=$caption_dropout_every_n_epochs" )
+fi
+if [[ $caption_dropout_rate -ne 0 ]]; then
+  ext_args+=( "--caption_dropout_rate=$caption_dropout_rate" )
+fi
+if [[ $caption_tag_dropout_rate -ne 0 ]]; then
+  ext_args+=( "--caption_tag_dropout_rate=$caption_tag_dropout_rate" )
+fi
+
+accelerate launch --num_cpu_threads_per_process=8 "./sd-scripts/$laungh_script.py" \
+  --pretrained_model_name_or_path="$pretrained_model" \
+  --output_dir="./output" \
+  --logging_dir="./logs" \
+  --resolution="$resolution" \
+  --max_train_epochs="$max_train_epoches" \
+  --learning_rate="$lr" \
+  --lr_scheduler="$lr_scheduler" \
+  --output_name="$output_name" \
+  --train_batch_size="$batch_size" \
+  --save_every_n_epochs="$save_every_n_epochs" \
+  --save_precision="$save_precision" \
+  --seed="$seed" \
+  --max_token_length=225 \
+  --caption_extension=".txt" \
+  --save_model_as="$save_model_as" \
+  --vae_batch_size="$vae_batch_size" \
+  --xformers "${ext_args[@]}"
+
+echo "Train finished"
+read -p "Press Enter to continue..."
