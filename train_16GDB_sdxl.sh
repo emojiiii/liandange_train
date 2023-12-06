@@ -1,3 +1,4 @@
+#!/bin/bash
 # LoRA train script by @Akegarasu modify by @bdsqlsz
 
 #训练模式(Lora、db、Sdxl_lora、Sdxl_db、sdxl_cn3l、controlnet(未完成))
