@@ -177,7 +177,7 @@ ext_args=()
 
 launch_script="train_network"
 
-if [ ! "$train_mode" == "*lora" ] && [ ! "$train_mode" == "sdxl_cn3l" ]; then
+if if [[ "$train_mode" != *lora* && "$train_mode" != "sdxl_cn3l" ]];; then
   network_module=""
   network_dim=""
   network_alpha=""
